@@ -1,3 +1,5 @@
+import { api, ApiError, type EscrowContract } from './api';
+import { parseContract, unwrapData } from './schemas';
 import { api, ApiError, EscrowContract } from './api';
 import {
   diffSnapshots,
@@ -27,6 +29,19 @@ export interface PollErrorInfo {
   total: number;
   /** First error seen this tick. */
   error: unknown;
+}
+
+export async function fetchContractById(id: number, signal?: AbortSignal): Promise<EscrowContract> {
+  const res = await api<unknown>(`/api/v1/contracts/${id}`, { signal });
+  const parsed = parseContract(unwrapData(res), 'data');
+  if (!parsed.ok) {
+    throw new ApiError({
+      kind: 'schema',
+      message: `${parsed.path}: ${parsed.message}`,
+      userMessage: `Invalid contract payload (${parsed.path}).`,
+    });
+  }
+  return parsed.data;
 }
 
 export interface PollDeps {
@@ -244,6 +259,18 @@ export function startPoller(options: PollerOptions): () => void {
 }
 
 export async function fetchContractById(id: number, signal?: AbortSignal): Promise<EscrowContract> {
-  const res = await api<{ data: EscrowContract }>(`/api/v1/contracts/${id}`, { signal });
-  return res.data;
+  const res = await api<unknown>(`/api/v1/contracts/${id}`, { signal });
+  const { parseContract, unwrapData } = await import('./schemas');
+  // prefer static import at top of file instead of dynamic:
+  // import { parseContract, unwrapData } from './schemas';
+  const parsed = parseContract(unwrapData(res), 'data');
+  if (!parsed.ok) {
+    const { ApiError } = await import('./api');
+    throw new ApiError({
+      kind: 'schema',
+      message: `${parsed.path}: ${parsed.message}`,
+      userMessage: `Invalid contract payload (${parsed.path}).`,
+    });
+  }
+  return parsed.data;
 }
